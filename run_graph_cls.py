@@ -1,6 +1,7 @@
 import logging
 import torch
-from wrench.dataset import load_dataset
+import numpy as np
+from wrench.dataset import load_dataset, extract_node_features
 from wrench.logging import LoggingHandler
 from wrench.labelmodel import Snorkel
 from wrench.endmodel import EndClassifierModel
@@ -63,15 +64,15 @@ device = torch.device('cuda:1')
 
 #### Load dataset
 dataset_path = './datasets/'
-data = 'yelpzip'
+data = 'git_ml'
 train_data, valid_data, test_data = load_dataset(
     dataset_path,
     data,
     extract_feature=True,
     device=device,
-    extract_fn='bert', # extract bert embedding
-    model_name='bert-base-cased',
-    cache_name='bert'
+    # extract_fn='bert', # extract bert embedding
+    # model_name='bert-base-cased',
+    # cache_name='bert'
 )
 
 #### Run label model: Snorkel
@@ -88,22 +89,25 @@ acc = label_model.test(test_data, 'acc')
 logger.info(f'label model test acc: {acc}')
 
 # model = RGCN(n_hetero_features, 20, n_user_classes, hetero_graph.etypes)
-node_feats = torch.cat(train_data.features, valid_data.features, test_data.features)
-gt = torch.cat(train_data.labels, valid_data.labels, test_data.labels)
+graph = train_data.load_graph().to(device)
+node_feats = np.concatenate([train_data.features, valid_data.features, test_data.features])
+node_id = np.concatenate([train_data.node_id, valid_data.node_id, test_data.node_id])
+gt = np.concatenate([train_data.labels, valid_data.labels, test_data.labels])
+node_feats = extract_node_features(graph=graph, node_features=node_feats, node_id=node_id, dense=True)
+node_feats = torch.from_numpy(node_feats).to(device)
+gt = torch.from_numpy(gt).to(device)
 # node_features =  {'node_id': user_feats}
 #### Filter out uncovered training data
 train_data = train_data.get_covered_subset()
-aggregated_hard_labels = label_model.predict(train_data)
-aggregated_soft_labels = label_model.predict_proba(train_data)
+aggregated_hard_labels = torch.from_numpy(label_model.predict(train_data)).to(device)
+aggregated_soft_labels = torch.from_numpy(label_model.predict_proba(train_data)).to(device)
 train_node_id = train_data.node_id
 valid_node_id = valid_data.node_id
 test_node_id = test_data.node_id
 
-graph = train_data.graph[0].to(device)
 
 # item_feats = hetero_graph.nodes['item'].data['feature']
 
-opt = torch.optim.Adam(model.parameters())
 
 # Run end model: RGCN
 # for epoch in range(1000):
@@ -118,24 +122,29 @@ opt = torch.optim.Adam(model.parameters())
 #     loss.backward()
 #     opt.step()
 #     print(loss.item())
-n_features = node_features.shape[1]
+n_features = node_feats.shape[1]
 n_labels = int(max(gt) + 1)
 # Run end model: GraphSage
 model = SAGE(in_feats=n_features, hid_feats=100, out_feats=n_labels).to(device)
-criterion = nn.CrossEntropyLoss().to(opt.device)
-for epoch in range(10):
+opt = torch.optim.Adam(model.parameters())
+schedulerC = torch.optim.lr_scheduler.MultiStepLR(opt, [30, 80])
+criterion = nn.CrossEntropyLoss().to(device)
+for epoch in range(100):
     model.train()
     # forward propagation by using all nodes
-    preds = model(graph, node_features)
+    preds = model(graph, node_feats)
+    preds = F.softmax(preds[train_node_id], dim=-1)
     # compute loss
-    loss = criterion(preds[train_node_id], aggregated_hard_labels[train_node_id])
+    loss = criterion(preds, aggregated_hard_labels)
     # compute validation accuracy
-    acc = evaluate(model, graph, node_features, gt, valid_node_id)
+    acc = evaluate(model, graph, node_feats, gt, valid_node_id)
     # backward propagation
     opt.zero_grad()
     loss.backward()
     opt.step()
+    schedulerC.step()
     if epoch % 10 == 0:
         print("Epoch {} ACC: {}".format(epoch, acc))
         print(loss.item())
-acc = evaluate(model, graph, node_features, gt, test_node_id)
+acc = evaluate(model, graph, node_feats, gt, test_node_id)
+print("Test acc: {}".format(acc))

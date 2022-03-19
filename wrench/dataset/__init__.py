@@ -1,12 +1,13 @@
 from .basedataset import BaseDataset
 from .dataset import NumericDataset, TextDataset, RelationDataset, ImageDataset
 from .seqdataset import BaseSeqDataset
-from .graphdataset import GraphDataset, GraphNumericDataset, GraphTextDataset
+from .graphdataset import GraphDataset, GraphNumericDataset, GraphTextDataset, extract_node_features
 from .torchdataset import sample_batch, TorchDataset, BERTTorchTextClassDataset, BERTTorchRelationClassDataset, ImageTorchDataset
 
 numeric_datasets = ['census', 'basketball', 'tennis', 'commercial']
 text_datasets = ['agnews', 'imdb', 'sms', 'trec', 'yelp', 'youtube']
 graph_text_datasets = ['yelpzip']
+graph_numerical_datasets = ['git_ml', 'facebook_large'] 
 relation_dataset = ['cdr', 'spouse', 'chemprot', 'semeval']
 cls_dataset_list = numeric_datasets + text_datasets + relation_dataset
 bin_cls_dataset_list = numeric_datasets + ['cdr', 'spouse', 'sms', 'yelp', 'imdb', 'youtube']
@@ -44,6 +45,8 @@ def get_dataset_type(dataset_name):
         return BaseSeqDataset
     elif dataset_name in graph_text_datasets:
         return GraphTextDataset
+    elif dataset_name in graph_numerical_datasets:
+        return GraphNumericDataset
     raise NotImplementedError('cannot recognize the dataset type! please specify the dataset_type.')
 
 
