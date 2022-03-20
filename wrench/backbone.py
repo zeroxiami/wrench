@@ -4,6 +4,7 @@ from typing import Dict, Optional
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import dgl.nn as dglnn
 import torchvision
 from transformers import AutoModel, AutoConfig
 
@@ -612,3 +613,34 @@ class MultiCRF(CRF):
     def forward(self, feats, mask, attn_weight):
         transitions_l = torch.tensordot(attn_weight, self.transitions, dims=([1], [0]))
         return self.viterbi_decode_w_transitions(feats, mask, transitions_l)
+
+""" GNN for classification """
+class GNNClassifier(BackBone):
+    def __init__(self, in_feats, hid_feats, n_class, model_name='gcn', gnn_block = dglnn.GraphConv, binary_mode=False ,**kwargs):
+        super(GNNClassifier, self).__init__(n_class=n_class,  binary_mode=binary_mode)
+        hyperparas_dict = {}
+        change_dict = {}
+        if model_name in ['gcn', 'sgc', 'sage']:
+            hyperparas_dict["in_feats"] = in_feats
+            hyperparas_dict["out_feats"] = hid_feats
+            change_dict["in_feats"] = hid_feats
+            change_dict["out_feats"] = n_class
+            if model_name == 'sage':
+                hyperparas_dict['aggregator_type'] = 'mean'
+        self.layer1 = gnn_block(**hyperparas_dict)
+        hyperparas_dict = self._update_kwargs(hyperparas_dict, **change_dict)
+        self.layer2 = gnn_block(**hyperparas_dict)
+
+    def forward(self, graph, inputs):
+        # inputs are features of nodes
+        device = self.get_device()
+        # inputs, graph = inputs.to(device), graph.to(device)
+        h = self.layer1(graph, inputs)
+        h = F.relu(h)
+        h = self.layer2(graph, h)
+        return h
+
+    def _update_kwargs(self, hyperparas_dict,  **kwargs):
+        for key, value in kwargs.items():
+            hyperparas_dict[key] = value
+        return hyperparas_dict

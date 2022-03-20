@@ -4,7 +4,7 @@ import numpy as np
 from wrench.dataset import load_dataset, extract_node_features
 from wrench.logging import LoggingHandler
 from wrench.labelmodel import Snorkel
-from wrench.endmodel import EndClassifierModel
+from wrench.endmodel import GraphModel
 import dgl.nn as dglnn
 import torch.nn as nn
 import torch.nn.functional as F
@@ -92,19 +92,34 @@ logger.info(f'label model test acc: {acc}')
 graph = train_data.load_graph().to(device)
 node_feats = np.concatenate([train_data.features, valid_data.features, test_data.features])
 node_id = np.concatenate([train_data.node_id, valid_data.node_id, test_data.node_id])
-gt = np.concatenate([train_data.labels, valid_data.labels, test_data.labels])
+# gt = np.concatenate([train_data.labels, valid_data.labels, test_data.labels])
 node_feats = extract_node_features(graph=graph, node_features=node_feats, node_id=node_id, dense=True)
-node_feats = torch.from_numpy(node_feats).to(device)
-gt = torch.from_numpy(gt).to(device)
+# node_feats = torch.from_numpy(node_feats).to(device)
+# gt = torch.from_numpy(gt).to(device)
 # node_features =  {'node_id': user_feats}
 #### Filter out uncovered training data
 train_data = train_data.get_covered_subset()
-aggregated_hard_labels = torch.from_numpy(label_model.predict(train_data)).to(device)
-aggregated_soft_labels = torch.from_numpy(label_model.predict_proba(train_data)).to(device)
-train_node_id = train_data.node_id
-valid_node_id = valid_data.node_id
-test_node_id = test_data.node_id
+aggregated_hard_labels = label_model.predict(train_data)
+aggregated_soft_labels = label_model.predict_proba(train_data)
 
+#### Run end model: MLP
+model = GraphModel(
+    n_steps=100,
+    gnn_block='sage',
+)
+model.fit(
+    dataset_train=train_data,
+    y_train=aggregated_hard_labels,
+    dataset_valid=valid_data,
+    metric='acc',
+    patience=100,
+    device=device,
+    node_feats=node_feats,
+    hid_size=100,
+    graph=graph,
+)
+acc = model.test(test_data, 'acc')
+logger.info(f'end model (GNN) test acc: {acc}')
 
 # item_feats = hetero_graph.nodes['item'].data['feature']
 
@@ -122,29 +137,30 @@ test_node_id = test_data.node_id
 #     loss.backward()
 #     opt.step()
 #     print(loss.item())
-n_features = node_feats.shape[1]
-n_labels = int(max(gt) + 1)
-# Run end model: GraphSage
-model = SAGE(in_feats=n_features, hid_feats=100, out_feats=n_labels).to(device)
-opt = torch.optim.Adam(model.parameters())
-schedulerC = torch.optim.lr_scheduler.MultiStepLR(opt, [30, 80])
-criterion = nn.CrossEntropyLoss().to(device)
-for epoch in range(100):
-    model.train()
-    # forward propagation by using all nodes
-    preds = model(graph, node_feats)
-    preds = F.softmax(preds[train_node_id], dim=-1)
-    # compute loss
-    loss = criterion(preds, aggregated_hard_labels)
-    # compute validation accuracy
-    acc = evaluate(model, graph, node_feats, gt, valid_node_id)
-    # backward propagation
-    opt.zero_grad()
-    loss.backward()
-    opt.step()
-    schedulerC.step()
-    if epoch % 10 == 0:
-        print("Epoch {} ACC: {}".format(epoch, acc))
-        print(loss.item())
-acc = evaluate(model, graph, node_feats, gt, test_node_id)
-print("Test acc: {}".format(acc))
+# n_features = node_feats.shape[1]
+# n_labels = int(max(gt) + 1)
+# graph = graph
+# # Run end model: GraphSage
+# model = SAGE(in_feats=n_features, hid_feats=100, out_feats=n_labels).to(device)
+# opt = torch.optim.Adam(model.parameters())
+# schedulerC = torch.optim.lr_scheduler.MultiStepLR(opt, [30, 80])
+# criterion = nn.CrossEntropyLoss().to(device)
+# for epoch in range(100):
+#     model.train()
+#     # forward propagation by using all nodes
+#     preds = model(graph, node_feats)
+#     preds = F.softmax(preds[train_node_id], dim=-1)
+#     # compute loss
+#     loss = criterion(preds, aggregated_hard_labels)
+#     # compute validation accuracy
+#     acc = evaluate(model, graph, node_feats, gt, valid_node_id)
+#     # backward propagation
+#     opt.zero_grad()
+#     loss.backward()
+#     opt.step()
+#     schedulerC.step()
+#     if epoch % 10 == 0:
+#         print("Epoch {} ACC: {}".format(epoch, acc))
+#         print(loss.item())
+# acc = evaluate(model, graph, node_feats, gt, test_node_id)
+# print("Test acc: {}".format(acc))

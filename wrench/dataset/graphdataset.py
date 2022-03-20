@@ -54,6 +54,7 @@ class GraphDataset(BaseDataset):
                  feature_cache_name: Optional[str] = None,
                  **kwargs: Any) -> None:
         import dgl
+        self.node_id = []
         super().__init__(path, split, feature_cache_name, **kwargs)
         if self.path is not None:
             self.graph_path = self.path / f'graph.bin'
@@ -62,7 +63,6 @@ class GraphDataset(BaseDataset):
     def load(self, path: str, split: str):
         super().load(self.path, self.split)
         data_path = path / f'{split}.json'
-        self.node_id = []
         data = json.load(open(data_path, 'r'))
         for i, item in tqdm(data.items()):
             self.node_id.append(item["data"]["node_id"])
@@ -70,7 +70,6 @@ class GraphDataset(BaseDataset):
 
     def create_subset(self, idx: List[int]):
         dataset = super().create_subset(idx)
-        dataset.node_id = []
         for i in idx:
             dataset.node_id.append(self.node_id[i])
         return dataset
