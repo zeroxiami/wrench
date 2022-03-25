@@ -616,28 +616,51 @@ class MultiCRF(CRF):
 
 """ GNN for classification """
 class GNNClassifier(BackBone):
-    def __init__(self, in_feats, hid_feats, n_class, model_name='gcn', gnn_block = dglnn.GraphConv, binary_mode=False ,**kwargs):
+    def __init__(self, input_size, hidden_size, n_class, num_layers=2, model_name='gcn',  binary_mode=False ,**kwargs):
         super(GNNClassifier, self).__init__(n_class=n_class,  binary_mode=binary_mode)
         hyperparas_dict = {}
-        change_dict = {}
+        intermediate = {}
+        final = {}
+        if model_name == 'gcn':
+            gnn_block = dglnn.GraphConv
+        elif model_name == 'sgc':
+            gnn_block = dglnn.SGConv
+        elif model_name== "sage":
+            gnn_block = dglnn.SAGEConv
+        elif model_name == "gin":
+            gnn_block = dglnn.GINConv
+        # elif model_name == "gat":
+        #     gnn_block = dgl.GATConv
+        else:
+            raise NotImplementedError('cannot recognize the gnn block type!')
         if model_name in ['gcn', 'sgc', 'sage']:
-            hyperparas_dict["in_feats"] = in_feats
-            hyperparas_dict["out_feats"] = hid_feats
-            change_dict["in_feats"] = hid_feats
-            change_dict["out_feats"] = n_class
+            hyperparas_dict["in_feats"] = input_size
+            hyperparas_dict["out_feats"] = hidden_size
+            intermediate["in_feats"] = hidden_size
+            intermediate["out_feats"] = hidden_size
+            final["in_feats"] = hidden_size
+            final["out_feats"] = n_class
             if model_name == 'sage':
                 hyperparas_dict['aggregator_type'] = 'mean'
+        elif model_name in ['gin']:
+            hyperparas_dict["apply_func"] = nn.Linear(input_size, input_size)
+            final["apply_func"] = nn.Linear(input_size, input_size)
+            hyperparas_dict["aggregator_type"] = "max"
+        assert num_layers > 0
+
+    
         self.layer1 = gnn_block(**hyperparas_dict)
-        hyperparas_dict = self._update_kwargs(hyperparas_dict, **change_dict)
+        hyperparas_dict = self._update_kwargs(hyperparas_dict, **intermediate)
         self.layer2 = gnn_block(**hyperparas_dict)
+        hyperparas_dict = self._update_kwargs(hyperparas_dict, **final)
+        self.layer3 = gnn_block(**hyperparas_dict)
 
     def forward(self, graph, inputs):
         # inputs are features of nodes
-        device = self.get_device()
-        # inputs, graph = inputs.to(device), graph.to(device)
-        h = self.layer1(graph, inputs)
-        h = F.relu(h)
-        h = self.layer2(graph, h)
+        h = inputs
+        for layer in self.children(): 
+            h = layer(graph, h)
+            h = F.relu(h)
         return h
 
     def _update_kwargs(self, hyperparas_dict,  **kwargs):

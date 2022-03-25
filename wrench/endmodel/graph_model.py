@@ -29,29 +29,15 @@ class GraphModel(BaseTorchClassModel):
                  test_batch_size: Optional[int] = 512,
                  n_steps: Optional[int] = 100,
                  binary_mode: Optional[bool] = False,
-                 gnn_block: Union[str, Callable] = None,
+                 hidden_size: int = 100,
+                 block_name: str = None,
+                 num_layers: int = 2,
                  ):
         super().__init__()
-        self.block_name = None
-        if not gnn_block:
-            self.gnn_block = dglnn.GraphConv
-            self.block_name = "gcn"
-        if isinstance(gnn_block, str):
-            self.block_name = gnn_block
-            if gnn_block == "gcn":
-                self.gnn_block = GraphConv
-            elif gnn_block == "sage":
-                self.gnn_block = dglnn.SAGEConv
-            elif gnn_block == "sgc":
-                self.gnn_block = SGConv
-            # elif gnn_block == "gin":
-            #     self.gnn_block = dglnn.GINConv
-            # elif gnn_block == "gat":
-            #     self.gnn_block = dgl.GATConv
-            else:
-                raise NotImplementedError('cannot recognize the gnn block type!')
+        if not block_name:
+            block_name = "gcn"
         else:
-            self.gnn_block = gnn_block
+            block_name = block_name
         self.hyperparas = {
             'lr'             : lr,
             'l2'             : l2,
@@ -59,7 +45,9 @@ class GraphModel(BaseTorchClassModel):
             'test_batch_size': test_batch_size,
             'n_steps'        : n_steps,
             'binary_mode'    : binary_mode,
-            'block_name'     : self.block_name
+            'block_name'     : block_name,
+            'hidden_size'    : hidden_size,
+            'num_layers'     : num_layers,
         }
         self.model: Optional[BackBone] = None
 
@@ -68,6 +56,8 @@ class GraphModel(BaseTorchClassModel):
             y_train: Optional[np.ndarray] = None,
             dataset_valid: Optional[BaseDataset] = None,
             y_valid: Optional[np.ndarray] = None,
+            node_feats: np.ndarray = None,
+            graph: dgl.DGLGraph = None,
             sample_weight: Optional[np.ndarray] = None,
             # evaluation_step: Optional[int] = 100,
             metric: Optional[Union[str, Callable]] = 'acc',
@@ -76,9 +66,6 @@ class GraphModel(BaseTorchClassModel):
             tolerance: Optional[float] = -1.0,
             device: Optional[torch.device] = None,
             verbose: Optional[bool] = True,
-            node_feats: np.ndarray = None,
-            hid_size: int = 100,
-            graph: dgl.DGLGraph = None,
             **kwargs: Any):
 
         if not verbose:
@@ -88,8 +75,7 @@ class GraphModel(BaseTorchClassModel):
         hyperparas = self.hyperparas
 
         n_steps = hyperparas['n_steps']
-        # train_dataloader = DataLoader(TorchDataset(dataset_train, n_data=n_steps * hyperparas['batch_size']),
-        #                               batch_size=hyperparas['batch_size'], shuffle=True)
+       
         node_feats = torch.from_numpy(node_feats).to(device)
         self.node_feats = node_feats
         self.graph = graph.to(device)
@@ -106,12 +92,12 @@ class GraphModel(BaseTorchClassModel):
         n_class = dataset_train.n_class
         input_size = node_feats.shape[1]
         model = GNNClassifier(
-            in_feats=input_size,
-            hid_feats=hid_size,
+            input_size=input_size,
+            hidden_size=hyperparas['hidden_size'],
             n_class=n_class,
+            num_layers=hyperparas['num_layers'],
             binary_mode=hyperparas['binary_mode'],
-            model_name=self.block_name,
-            gnn_block=self.gnn_block
+            model_name=hyperparas['block_name'],
         ).to(device)
         self.model = model
 
@@ -124,11 +110,10 @@ class GraphModel(BaseTorchClassModel):
 
         history = {}
         last_step_log = {}
-        # step = 0
+        
         try:
             with trange(n_steps, desc="[TRAIN] GNN Classifier", unit="steps", disable=not verbose, ncols=150, position=0, leave=True) as pbar:
                 for step in pbar:
-                # step += 1
                     model.train()
                     optimizer.zero_grad()
                     outputs = F.softmax(model(graph, node_feats)[dataset_train.node_id], dim=-1)
@@ -163,6 +148,7 @@ class GraphModel(BaseTorchClassModel):
         self._finalize()
 
         return history
+
 
     def _calc_valid_metric(self, **kwargs):
         # with autocast(enabled=get_amp_flag()):

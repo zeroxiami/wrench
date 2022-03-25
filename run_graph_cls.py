@@ -64,7 +64,7 @@ device = torch.device('cuda:1')
 
 #### Load dataset
 dataset_path = './datasets/'
-data = 'git_ml'
+data = 'facebook_large'
 train_data, valid_data, test_data = load_dataset(
     dataset_path,
     data,
@@ -104,19 +104,19 @@ aggregated_soft_labels = label_model.predict_proba(train_data)
 
 #### Run end model: MLP
 model = GraphModel(
-    n_steps=100,
-    gnn_block='sage',
+    n_steps=50,
+    lr=1e-3,
+    block_name='sage',
 )
 model.fit(
     dataset_train=train_data,
+    node_feats=node_feats,
+    graph=graph,
     y_train=aggregated_hard_labels,
     dataset_valid=valid_data,
     metric='acc',
     patience=100,
     device=device,
-    node_feats=node_feats,
-    hid_size=100,
-    graph=graph,
 )
 acc = model.test(test_data, 'acc')
 logger.info(f'end model (GNN) test acc: {acc}')

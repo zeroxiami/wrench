@@ -26,10 +26,11 @@ def extract_node_features(graph : dgl.DGLGraph, node_features : np.ndarray, node
     unlabeled_nodes = list(set(nodes) - set(node_id))
     if len(unlabeled_nodes) == 0:
         return node_features
-    feature_shape = np.concatenate([nodes.shape[0]], node_features.shape[1:])
-    unlabeled_feature_shape = np.concatenate([len(unlabeled_nodes)], node_features.shape[1:])
+    feature_shape = node_features.shape[1:]
+    feature_shape = np.concatenate([[nodes.shape[0]], node_features.shape[1:]])
+    unlabeled_feature_shape = np.concatenate([[len(unlabeled_nodes)], node_features.shape[1:]])
     features = np.empty(feature_shape, dtype=np.float32)
-    features[node_id] =  node_features
+    features[node_id.astype(int)] =  node_features
 
     if init == "normal":
         features[unlabeled_nodes] = np.random.normal(size=unlabeled_feature_shape)
@@ -53,7 +54,6 @@ class GraphDataset(BaseDataset):
                  split: Optional[str] = None,
                  feature_cache_name: Optional[str] = None,
                  **kwargs: Any) -> None:
-        import dgl
         self.node_id = []
         super().__init__(path, split, feature_cache_name, **kwargs)
         if self.path is not None:
@@ -65,7 +65,7 @@ class GraphDataset(BaseDataset):
         data_path = path / f'{split}.json'
         data = json.load(open(data_path, 'r'))
         for i, item in tqdm(data.items()):
-            self.node_id.append(item["data"]["node_id"])
+            self.node_id.append(int(item["data"]["node_id"]))
         return self
 
     def create_subset(self, idx: List[int]):
