@@ -1,7 +1,7 @@
 from .basedataset import BaseDataset
 from .dataset import NumericDataset, TextDataset, RelationDataset, ImageDataset
 from .seqdataset import BaseSeqDataset
-from .graphdataset import GraphDataset, GraphNumericDataset, GraphTextDataset, extract_node_features
+from .graphdataset import GraphDataset, GraphNumericDataset, GraphTextDataset, extract_node_features, normalize_adj
 from .torchdataset import sample_batch, TorchDataset, BERTTorchTextClassDataset, BERTTorchRelationClassDataset, ImageTorchDataset
 
 numeric_datasets = ['census', 'basketball', 'tennis', 'commercial']

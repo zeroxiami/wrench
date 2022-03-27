@@ -5,4 +5,5 @@ from .gold import GoldCondProb
 from .majority_voting import MajorityVoting, MajorityWeightedVoting
 from .metal import MeTaL
 from .naive_bayes import NaiveBayesModel
+from .label_prop import LPA
 from .snorkel import Snorkel
