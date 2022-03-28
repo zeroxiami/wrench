@@ -14,7 +14,7 @@ import dgl.nn as dglnn
 
 from ..backbone import BackBone, GNNClassifier
 from ..basemodel import BaseTorchClassModel
-from ..dataset import BaseDataset, TorchDataset
+from ..dataset import BaseDataset, TorchDataset, normalize_adj
 from ..utils import cross_entropy_with_probs
 from ..evaluation import METRIC
 
@@ -110,7 +110,7 @@ class GraphModel(BaseTorchClassModel):
 
         history = {}
         last_step_log = {}
-        
+        graph = dgl.from_scipy(normalize_adj(graph)).to(device)
         try:
             with trange(n_steps, desc="[TRAIN] GNN Classifier", unit="steps", disable=not verbose, ncols=150, position=0, leave=True) as pbar:
                 for step in pbar:

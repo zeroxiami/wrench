@@ -53,8 +53,9 @@ def normalize_adj(graph : dgl.DGLGraph):
     """Symmetrically normalize adjacency matrix."""
     adj = graph.adj().to_dense()
     adj = sp.coo_matrix(adj)
-    rowsum = np.array(adj.sum(1))
-    d_inv_sqrt = np.power(rowsum, -0.5).flatten()
+    degree = graph.in_degrees().float().clamp(min=1).cpu().numpy()
+    # rowsum = np.array(adj.sum(1))
+    d_inv_sqrt = np.power(degree, -0.5).flatten()
     d_inv_sqrt[np.isinf(d_inv_sqrt)] = 0.
     d_mat_inv_sqrt = sp.diags(d_inv_sqrt)
     return d_mat_inv_sqrt.dot(adj).dot(d_mat_inv_sqrt).tocoo()

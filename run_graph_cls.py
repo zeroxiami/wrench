@@ -35,8 +35,8 @@ train_data, valid_data, test_data = load_dataset(
 
 #### Run label model: LPA
 lpa = LPA(
-    alpha=1.0,
-    lpa_iters=100,
+    alpha=0.5,
+    lpa_iters=15,
 )
 lpa.fit(
     dataset_train=train_data,
